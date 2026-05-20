@@ -1,204 +1,161 @@
 let API = null;
 let alignments = [];
 
-const alignmentSelect = document.getElementById("alignment");
-const startInput = document.getElementById("startKm");
-const endInput = document.getElementById("endKm");
 const statusBox = document.getElementById("status");
+const alignmentSelect = document.getElementById("alignmentSelect");
 
-function setStatus(message) {
-    statusBox.textContent = message;
+function setStatus(text) {
+  statusBox.textContent = text;
 }
 
 async function init() {
+  API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
 
-    API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
+  const response = await fetch("./aliniamente.xml?v=50");
+  const xmlText = await response.text();
 
-    const response = await fetch("./aliniamente.xml");
-    const xmlText = await response.text();
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "text/xml");
 
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+  const alignmentNodes = Array.from(xml.getElementsByTagName("Alignment"));
 
-    const alignmentNodes = xmlDoc.getElementsByTagName("Alignment");
+  alignmentSelect.innerHTML = "";
 
-    for (let i = 0; i < alignmentNodes.length; i++) {
+  alignments = alignmentNodes.map((node, index) => {
+    const item = {
+      name: node.getAttribute("name"),
+      length: Number(node.getAttribute("length")),
+      node
+    };
 
-        const alignment = alignmentNodes[i];
+    const option = document.createElement("option");
+    option.value = index;
+    option.textContent = `${item.name} | Length: ${item.length.toFixed(2)} m`;
 
-        const name = alignment.getAttribute("name");
+    alignmentSelect.appendChild(option);
 
-        const coordText =
-            alignment.getElementsByTagName("CoordGeom")[0].textContent;
+    return item;
+  });
 
-        const lines = coordText
-            .trim()
-            .split("\n")
-            .map(l => l.trim())
-            .filter(l => l.length > 0);
-
-        const points = lines.map(line => {
-
-            const parts = line.split(",");
-
-            return {
-                x: parseFloat(parts[0]),
-                y: parseFloat(parts[1])
-            };
-        });
-
-        let totalLength = 0;
-
-        for (let j = 1; j < points.length; j++) {
-
-            const dx = points[j].x - points[j - 1].x;
-            const dy = points[j].y - points[j - 1].y;
-
-            totalLength += Math.sqrt(dx * dx + dy * dy);
-        }
-
-        alignments.push({
-            name,
-            points,
-            length: totalLength
-        });
-
-        const option = document.createElement("option");
-
-        option.value = i;
-        option.textContent =
-            `${name} | Length: ${totalLength.toFixed(2)} m`;
-
-        alignmentSelect.appendChild(option);
-    }
-
-    setStatus("Ready.");
+  setStatus(`Ready.\nAlignments loaded: ${alignments.length}`);
 }
 
-function getPointAtChainage(points, chainage) {
-
-    let accumulated = 0;
-
-    for (let i = 1; i < points.length; i++) {
-
-        const p1 = points[i - 1];
-        const p2 = points[i];
-
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-
-        const segmentLength = Math.sqrt(dx * dx + dy * dy);
-
-        if (accumulated + segmentLength >= chainage) {
-
-            const local = chainage - accumulated;
-
-            const t = local / segmentLength;
-
-            return {
-                x: p1.x + dx * t,
-                y: p1.y + dy * t,
-                dirX: dx / segmentLength,
-                dirY: dy / segmentLength
-            };
-        }
-
-        accumulated += segmentLength;
-    }
-
-    return null;
+function parsePoint(text) {
+  const p = text.trim().split(/\s+/).map(Number);
+  return { x: p[0], y: p[1], z: 0 };
 }
 
-document.getElementById("calculate").onclick = async () => {
+function getSegments(alignmentNode) {
+  const coordGeom = alignmentNode.getElementsByTagName("CoordGeom")[0];
+  const lines = Array.from(coordGeom.getElementsByTagName("Line"));
 
-    const alignment =
-        alignments[alignmentSelect.value];
+  return lines.map(line => {
+    return {
+      staStart: Number(line.getAttribute("staStart")),
+      length: Number(line.getAttribute("length")),
+      start: parsePoint(line.getElementsByTagName("Start")[0].textContent),
+      end: parsePoint(line.getElementsByTagName("End")[0].textContent)
+    };
+  });
+}
 
-    const startKm =
-        parseFloat(startInput.value);
+function getPointAtChainage(segments, chainage) {
+  for (const s of segments) {
+    const staEnd = s.staStart + s.length;
 
-    const endKm =
-        parseFloat(endInput.value);
+    if (chainage >= s.staStart && chainage <= staEnd) {
+      const t = (chainage - s.staStart) / s.length;
 
-    if (!alignment) {
-        setStatus("Select alignment.");
-        return;
+      const x = s.start.x + (s.end.x - s.start.x) * t;
+      const y = s.start.y + (s.end.y - s.start.y) * t;
+
+      const dx = s.end.x - s.start.x;
+      const dy = s.end.y - s.start.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+
+      return {
+        x,
+        y,
+        z: 0,
+        dirX: dx / len,
+        dirY: dy / len
+      };
     }
+  }
 
-    const startPoint =
-        getPointAtChainage(
-            alignment.points,
-            startKm
-        );
+  return null;
+}
 
-    const endPoint =
-        getPointAtChainage(
-            alignment.points,
-            endKm
-        );
-
-    if (!startPoint || !endPoint) {
-
-        setStatus("Invalid chainage.");
-        return;
+async function addPlane(point, normalX, normalY) {
+  return API.viewer.addSectionPlane({
+    position: {
+      x: point.x,
+      y: point.y,
+      z: 0
+    },
+    normal: {
+      x: normalX,
+      y: normalY,
+      z: 0
     }
+  });
+}
 
-    try {
+document.getElementById("slice").onclick = async () => {
+  const alignment = alignments[Number(alignmentSelect.value)];
 
-        await API.viewer.removeSectionPlanes();
+  const start = Number(document.getElementById("start").value);
+  const end = Number(document.getElementById("end").value);
 
-    } catch (e) {}
+  if (!alignment) {
+    setStatus("Select alignment.");
+    return;
+  }
 
-    try {
+  if (start >= end) {
+    setStatus("End chainage must be greater than start.");
+    return;
+  }
 
-        await API.viewer.addSectionPlane({
+  if (end > alignment.length) {
+    setStatus(
+      `End chainage is outside alignment length.\n\n` +
+      `Alignment length: ${alignment.length.toFixed(2)} m`
+    );
+    return;
+  }
 
-            position: {
-                x: startPoint.x,
-                y: startPoint.y,
-                z: 0
-            },
+  const segments = getSegments(alignment.node);
 
-            normal: {
-                x: -startPoint.dirY,
-                y: startPoint.dirX,
-                z: 0
-            }
-        });
+  const p1 = getPointAtChainage(segments, start);
+  const p2 = getPointAtChainage(segments, end);
 
-        await API.viewer.addSectionPlane({
+  if (!p1 || !p2) {
+    setStatus("Could not calculate chainage points.");
+    return;
+  }
 
-            position: {
-                x: endPoint.x,
-                y: endPoint.y,
-                z: 0
-            },
+  try {
+    await API.viewer.removeSectionPlanes();
 
-            normal: {
-                x: endPoint.dirY,
-                y: -endPoint.dirX,
-                z: 0
-            }
-        });
+    await addPlane(p1, -p1.dirY, p1.dirX);
+    await addPlane(p2, p2.dirY, -p2.dirX);
 
-        setStatus(
-            "SECTION PLANES CREATED\n\n" +
+    setStatus(
+      `Slice created.\n\n` +
+      `Alignment: ${alignment.name}\n` +
+      `Start: ${start} m\n` +
+      `End: ${end} m`
+    );
 
-            `Alignment: ${alignment.name}\n` +
+  } catch (error) {
+    console.error(error);
 
-            `Start: ${startKm} m\n` +
-            `End: ${endKm} m`
-        );
-
-    } catch (error) {
-
-        console.error(error);
-
-        setStatus(
-            "Could not create section planes.\n\n" +
-            error.message
-        );
-    }
+    setStatus(
+      "Could not create section planes.\n\n" +
+      "Open browser console and send me the error."
+    );
+  }
 };
 
 init();
