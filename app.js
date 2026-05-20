@@ -39,12 +39,42 @@ document.getElementById("selectAlignment").onclick = async () => {
       return;
     }
 
-    selectedAlignment = selection;
+selectedAlignment = selection;
 
-    setStatus(
-      "Selected object detected:\n\n" +
-      JSON.stringify(selection, null, 2)
+const modelId = selection[0].modelId;
+const runtimeIds = selection[0].objectRuntimeIds;
+
+try {
+
+  const properties =
+    await API.viewer.getObjectProperties(
+      modelId,
+      runtimeIds
     );
+
+  console.log(properties);
+
+  setStatus(
+
+    "OBJECT PROPERTIES:\n\n" +
+
+    JSON.stringify(
+      properties,
+      null,
+      2
+    )
+
+  );
+
+}
+catch(error){
+
+  console.error(error);
+
+  setStatus(
+    "Could not read object properties."
+  );
+}
 
   } catch (error) {
     console.error(error);
