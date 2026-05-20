@@ -10,34 +10,21 @@ function setStatus(text) {
 
 async function init() {
   setStatus("Loading XML first...");
-
   await loadXML();
 
-  setStatus(`Ready.\nAlignments loaded: ${alignments.length}\nConnecting to Trimble API...`);
-
   try {
-    API = await Promise.race([
-      TrimbleConnectWorkspace.connect(window.parent, () => {}),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Trimble API connection timeout")), 5000)
-      )
-    ]);
-
+    API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
     setStatus(`Ready.\nAlignments loaded: ${alignments.length}\nTrimble API connected.`);
   } catch (error) {
     console.warn(error);
-    setStatus(`Ready.\nAlignments loaded: ${alignments.length}\nTrimble API not connected yet.`);
+    setStatus(`Ready.\nAlignments loaded: ${alignments.length}\nTrimble API not connected.`);
   }
 }
 
 async function loadXML() {
-  const response = await fetch("./aliniamente.xml?v=130");
-
-  if (!response.ok) {
-    throw new Error("Could not load aliniamente.xml");
-  }
-
+  const response = await fetch("./aliniamente.xml?v=140");
   const xmlText = await response.text();
+
   const parser = new DOMParser();
   const xml = parser.parseFromString(xmlText, "text/xml");
 
@@ -63,7 +50,7 @@ async function loadXML() {
 
 function parsePoint(text) {
   const p = text.trim().split(/\s+/).map(Number);
-  return { x: p[0], y: p[1], z: 0 };
+  return { x: p[0], y: p[1], z: p[2] || 0 };
 }
 
 function getSegments(alignmentNode) {
@@ -78,7 +65,38 @@ function getSegments(alignmentNode) {
   }));
 }
 
-function getPointAtChainage(segments, chainage) {
+function getProfilePoints(alignmentNode) {
+  const pviNodes = Array.from(alignmentNode.getElementsByTagName("PVI"));
+
+  return pviNodes.map(pvi => {
+    const parts = pvi.textContent.trim().split(/\s+/).map(Number);
+
+    return {
+      chainage: parts[0],
+      elevation: parts[1]
+    };
+  });
+}
+
+function getElevationAtChainage(profilePoints, chainage) {
+  if (profilePoints.length === 0) {
+    return 0;
+  }
+
+  for (let i = 1; i < profilePoints.length; i++) {
+    const p1 = profilePoints[i - 1];
+    const p2 = profilePoints[i];
+
+    if (chainage >= p1.chainage && chainage <= p2.chainage) {
+      const t = (chainage - p1.chainage) / (p2.chainage - p1.chainage);
+      return p1.elevation + (p2.elevation - p1.elevation) * t;
+    }
+  }
+
+  return profilePoints[profilePoints.length - 1].elevation;
+}
+
+function getPointAtChainage(segments, profilePoints, chainage) {
   for (const s of segments) {
     const staEnd = s.staStart + s.length;
 
@@ -87,6 +105,7 @@ function getPointAtChainage(segments, chainage) {
 
       const x = s.start.x + (s.end.x - s.start.x) * t;
       const y = s.start.y + (s.end.y - s.start.y) * t;
+      const z = getElevationAtChainage(profilePoints, chainage);
 
       const dx = s.end.x - s.start.x;
       const dy = s.end.y - s.start.y;
@@ -95,6 +114,7 @@ function getPointAtChainage(segments, chainage) {
       return {
         x,
         y,
+        z,
         dirX: dx / len,
         dirY: dy / len
       };
@@ -111,7 +131,7 @@ async function createSectionPlane(point) {
   return API.viewer.addSectionPlane({
     positionX: point.x,
     positionY: point.y,
-    positionZ: 0,
+    positionZ: point.z,
     directionX: normalX,
     directionY: normalY,
     directionZ: 0,
@@ -140,7 +160,8 @@ document.getElementById("createSection").onclick = async () => {
     }
 
     const segments = getSegments(alignment.node);
-    const point = getPointAtChainage(segments, chainage);
+    const profilePoints = getProfilePoints(alignment.node);
+    const point = getPointAtChainage(segments, profilePoints, chainage);
 
     if (!point) {
       setStatus("Could not calculate section position.");
@@ -149,12 +170,12 @@ document.getElementById("createSection").onclick = async () => {
 
     if (!API || !API.viewer) {
       setStatus(
-        `Calculated section position only.\n\n` +
+        `Calculated section only.\n\n` +
         `Alignment: ${alignment.name}\n` +
         `Chainage: ${chainage} m\n` +
         `X: ${point.x.toFixed(3)}\n` +
-        `Y: ${point.y.toFixed(3)}\n\n` +
-        `Trimble API is not connected.`
+        `Y: ${point.y.toFixed(3)}\n` +
+        `Z: ${point.z.toFixed(3)}`
       );
       return;
     }
@@ -167,7 +188,8 @@ document.getElementById("createSection").onclick = async () => {
       `Alignment: ${alignment.name}\n` +
       `Chainage: ${chainage} m\n` +
       `X: ${point.x.toFixed(3)}\n` +
-      `Y: ${point.y.toFixed(3)}`
+      `Y: ${point.y.toFixed(3)}\n` +
+      `Z: ${point.z.toFixed(3)}`
     );
 
   } catch (error) {
