@@ -163,10 +163,36 @@ document.getElementById("slice").onclick = async () => {
   }
 
   try {
-    await API.viewer.removeSectionPlanes();
+await API.viewer.removeSectionPlanes();
 
-    await addPlane(p1, -p1.dirY, p1.dirX);
-    await addPlane(p2, p2.dirY, -p2.dirX);
+const centerX = (p1.x + p2.x) / 2;
+const centerY = (p1.y + p2.y) / 2;
+
+const dx = p2.x - p1.x;
+const dy = p2.y - p1.y;
+
+const length = Math.sqrt(dx * dx + dy * dy);
+
+await API.viewer.addSectionBox({
+
+    position: {
+        x: centerX,
+        y: centerY,
+        z: 0
+    },
+
+    rotation: {
+        x: 0,
+        y: 0,
+        z: Math.atan2(dy, dx)
+    },
+
+    dimensions: {
+        x: length,
+        y: 50,
+        z: 1000
+    }
+});
 
     setStatus(
       `Slice created.\n\nAlignment: ${alignment.name}\nStart: ${start} m\nEnd: ${end} m`
