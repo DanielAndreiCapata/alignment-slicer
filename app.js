@@ -9,74 +9,53 @@ function setStatus(text) {
 }
 
 async function init() {
-  setStatus("Starting...");
+  setStatus("Connecting to Trimble...");
 
-  try {
-    API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
-    setStatus("Connected to Trimble Connect.\nLoading XML...");
-  } catch (error) {
-    console.warn(error);
-    setStatus("Could not connect to Trimble API, but XML loading will continue...");
-  }
+  API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
+
+  setStatus("Connected. Loading XML...");
 
   await loadXML();
 }
 
 async function loadXML() {
-  try {
-    let response = await fetch("./aliniamente.xml?v=60");
+  const response = await fetch("./aliniamente.xml?v=80");
+  const xmlText = await response.text();
 
-    if (!response.ok) {
-      response = await fetch("./Aliniamente.xml?v=60");
-    }
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "text/xml");
 
-    if (!response.ok) {
-      throw new Error("XML file not found.");
-    }
+  const alignmentNodes = Array.from(xml.getElementsByTagName("Alignment"));
 
-    const xmlText = await response.text();
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(xmlText, "text/xml");
+  alignmentSelect.innerHTML = "";
 
-    const alignmentNodes = Array.from(xml.getElementsByTagName("Alignment"));
+  alignments = alignmentNodes.map((node, index) => {
+    const item = {
+      name: node.getAttribute("name"),
+      length: Number(node.getAttribute("length")),
+      node: node
+    };
 
-    if (alignmentNodes.length === 0) {
-      throw new Error("No Alignment nodes found in XML.");
-    }
+    const option = document.createElement("option");
+    option.value = index;
+    option.textContent = `${item.name} | Length: ${item.length.toFixed(2)} m`;
 
-    alignmentSelect.innerHTML = "";
+    alignmentSelect.appendChild(option);
 
-    alignments = alignmentNodes.map((node, index) => {
-      const item = {
-        name: node.getAttribute("name"),
-        length: Number(node.getAttribute("length")),
-        node: node
-      };
+    return item;
+  });
 
-      const option = document.createElement("option");
-      option.value = index;
-      option.textContent = `${item.name} | Length: ${item.length.toFixed(2)} m`;
-
-      alignmentSelect.appendChild(option);
-
-      return item;
-    });
-
-    setStatus(`Ready.\nAlignments loaded: ${alignments.length}`);
-
-  } catch (error) {
-    console.error(error);
-    setStatus(
-      "ERROR loading XML:\n\n" +
-      error.message +
-      "\n\nCheck that the XML file exists in GitHub."
-    );
-  }
+  setStatus(`Ready.\nAlignments loaded: ${alignments.length}`);
 }
 
 function parsePoint(text) {
   const p = text.trim().split(/\s+/).map(Number);
-  return { x: p[0], y: p[1], z: 0 };
+
+  return {
+    x: p[0],
+    y: p[1],
+    z: 0
+  };
 }
 
 function getSegments(alignmentNode) {
@@ -120,82 +99,65 @@ function getPointAtChainage(segments, chainage) {
 
 async function addPlane(point, normalX, normalY) {
   return API.viewer.addSectionPlane({
-    position: {
-      x: point.x,
-      y: point.y,
-      z: 0
-    },
-    normal: {
-      x: normalX,
-      y: normalY,
-      z: 0
-    }
+    positionX: point.x * 1000,
+    positionY: point.y * 1000,
+    positionZ: 0,
+    directionX: normalX,
+    directionY: normalY,
+    directionZ: 0,
+    controlsVisible: true
   });
 }
 
 document.getElementById("slice").onclick = async () => {
-  const alignment = alignments[Number(alignmentSelect.value)];
-  const start = Number(document.getElementById("start").value);
-  const end = Number(document.getElementById("end").value);
-
-  if (!alignment) {
-    setStatus("Select an alignment.");
-    return;
-  }
-
-  if (start >= end) {
-    setStatus("End chainage must be greater than start.");
-    return;
-  }
-
-  if (end > alignment.length) {
-    setStatus(`End chainage is outside alignment length.\nLength: ${alignment.length.toFixed(2)} m`);
-    return;
-  }
-
-  const segments = getSegments(alignment.node);
-  const p1 = getPointAtChainage(segments, start);
-  const p2 = getPointAtChainage(segments, end);
-
-  if (!p1 || !p2) {
-    setStatus("Could not calculate chainage points.");
-    return;
-  }
-
   try {
-await API.viewer.removeSectionPlanes();
+    const alignment = alignments[Number(alignmentSelect.value)];
+    const start = Number(document.getElementById("start").value);
+    const end = Number(document.getElementById("end").value);
 
-const centerX = (p1.x + p2.x) / 2;
-const centerY = (p1.y + p2.y) / 2;
-
-const dx = p2.x - p1.x;
-const dy = p2.y - p1.y;
-
-const length = Math.sqrt(dx * dx + dy * dy);
-
-await API.viewer.addSectionBox({
-
-    position: {
-        x: centerX,
-        y: centerY,
-        z: 0
-    },
-
-    rotation: {
-        x: 0,
-        y: 0,
-        z: Math.atan2(dy, dx)
-    },
-
-    dimensions: {
-        x: length,
-        y: 50,
-        z: 1000
+    if (!alignment) {
+      setStatus("Select an alignment.");
+      return;
     }
-});
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      setStatus("Enter valid start and end chainage.");
+      return;
+    }
+
+    if (start >= end) {
+      setStatus("End chainage must be greater than start.");
+      return;
+    }
+
+    if (end > alignment.length) {
+      setStatus(
+        `End chainage is outside alignment length.\n\n` +
+        `Alignment length: ${alignment.length.toFixed(2)} m`
+      );
+      return;
+    }
+
+    const segments = getSegments(alignment.node);
+
+    const p1 = getPointAtChainage(segments, start);
+    const p2 = getPointAtChainage(segments, end);
+
+    if (!p1 || !p2) {
+      setStatus("Could not calculate chainage points.");
+      return;
+    }
+
+    await API.viewer.removeSectionPlanes();
+
+    await addPlane(p1, -p1.dirY, p1.dirX);
+    await addPlane(p2, p2.dirY, -p2.dirX);
 
     setStatus(
-      `Slice created.\n\nAlignment: ${alignment.name}\nStart: ${start} m\nEnd: ${end} m`
+      `Slice created.\n\n` +
+      `Alignment: ${alignment.name}\n` +
+      `Start: ${start} m\n` +
+      `End: ${end} m`
     );
 
   } catch (error) {
