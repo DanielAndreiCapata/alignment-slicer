@@ -10,36 +10,30 @@ function setStatus(text) {
 
 async function init() {
   setStatus("Connecting to Trimble...");
-
   API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
-
   setStatus("Connected. Loading XML...");
-
   await loadXML();
 }
 
 async function loadXML() {
-  const response = await fetch("./aliniamente.xml?v=80");
+  const response = await fetch("./aliniamente.xml?v=90");
   const xmlText = await response.text();
-
   const parser = new DOMParser();
   const xml = parser.parseFromString(xmlText, "text/xml");
 
   const alignmentNodes = Array.from(xml.getElementsByTagName("Alignment"));
-
   alignmentSelect.innerHTML = "";
 
   alignments = alignmentNodes.map((node, index) => {
     const item = {
       name: node.getAttribute("name"),
       length: Number(node.getAttribute("length")),
-      node: node
+      node
     };
 
     const option = document.createElement("option");
     option.value = index;
     option.textContent = `${item.name} | Length: ${item.length.toFixed(2)} m`;
-
     alignmentSelect.appendChild(option);
 
     return item;
@@ -50,12 +44,7 @@ async function loadXML() {
 
 function parsePoint(text) {
   const p = text.trim().split(/\s+/).map(Number);
-
-  return {
-    x: p[0],
-    y: p[1],
-    z: 0
-  };
+  return { x: p[0], y: p[1], z: 0 };
 }
 
 function getSegments(alignmentNode) {
@@ -99,8 +88,8 @@ function getPointAtChainage(segments, chainage) {
 
 async function addPlane(point, normalX, normalY) {
   return API.viewer.addSectionPlane({
-    positionX: point.x * 1000,
-    positionY: point.y * 1000,
+    positionX: point.x,
+    positionY: point.y,
     positionZ: 0,
     directionX: normalX,
     directionY: normalY,
@@ -115,38 +104,9 @@ document.getElementById("slice").onclick = async () => {
     const start = Number(document.getElementById("start").value);
     const end = Number(document.getElementById("end").value);
 
-    if (!alignment) {
-      setStatus("Select an alignment.");
-      return;
-    }
-
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      setStatus("Enter valid start and end chainage.");
-      return;
-    }
-
-    if (start >= end) {
-      setStatus("End chainage must be greater than start.");
-      return;
-    }
-
-    if (end > alignment.length) {
-      setStatus(
-        `End chainage is outside alignment length.\n\n` +
-        `Alignment length: ${alignment.length.toFixed(2)} m`
-      );
-      return;
-    }
-
     const segments = getSegments(alignment.node);
-
     const p1 = getPointAtChainage(segments, start);
     const p2 = getPointAtChainage(segments, end);
-
-    if (!p1 || !p2) {
-      setStatus("Could not calculate chainage points.");
-      return;
-    }
 
     await API.viewer.removeSectionPlanes();
 
