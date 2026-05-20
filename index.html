@@ -1,90 +1,47 @@
 <!doctype html>
 <html>
-
 <head>
-
 <meta charset="utf-8">
-
-<title>
-Alignment Slicer
-</title>
+<title>Alignment Slicer</title>
 
 <style>
-
 body {
-
   font-family: Arial;
   padding: 20px;
-
 }
 
-input,
-button,
-select {
-
+input, button, select {
   width: 100%;
   padding: 8px;
   margin-top: 8px;
   margin-bottom: 10px;
   box-sizing: border-box;
-
 }
 
 #status {
-
   white-space: pre-wrap;
   margin-top: 15px;
   font-size: 13px;
-
 }
-
 </style>
-
 </head>
 
 <body>
 
-<h2>
-Alignment Slicer
-</h2>
+<h2>Alignment Slicer</h2>
 
-<label>
-Alignment
-</label>
-
+<label>Alignment</label>
 <select id="alignmentSelect"></select>
 
-<label>
-Start chainage (m)
-</label>
+<label>Chainage / KM position (m)</label>
+<input id="chainage" type="number" placeholder="Ex: 7540">
 
-<input
-  id="start"
-  type="number"
-  placeholder="Ex: 4000"
-/>
+<button id="createSection">Create Section</button>
 
-<label>
-End chainage (m)
-</label>
-
-<input
-  id="end"
-  type="number"
-  placeholder="Ex: 5000"
-/>
-
-<button id="slice">
-Calculate Slice
-</button>
-
-<div id="status">
-Loading...
-</div>
+<div id="status">Loading...</div>
 
 <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-
-<script src="app.js?v=110"></script>
+<script src="app.js?v=120"></script>
 
 </body>
 </html>
