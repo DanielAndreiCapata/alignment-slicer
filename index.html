@@ -1,32 +1,30 @@
 <!doctype html>
 <html>
-
 <head>
   <meta charset="utf-8">
   <title>Alignment Slicer</title>
 
   <style>
-
-    body{
-      font-family: Arial;
-      padding:20px;
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
     }
 
-    input{
-      width:100%;
-      padding:8px;
-      margin-top:5px;
-      margin-bottom:15px;
+    input, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 6px;
+      margin-bottom: 12px;
+      box-sizing: border-box;
     }
 
-    button{
-      width:100%;
-      padding:10px;
-      cursor:pointer;
+    #status {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #333;
+      white-space: pre-wrap;
     }
-
   </style>
-
 </head>
 
 <body>
@@ -34,25 +32,18 @@
 <h2>Alignment Slicer</h2>
 
 <label>Start chainage (m)</label>
-
-<input
-  id="start"
-  type="number"
-  placeholder="Ex: 4000"
-/>
+<input id="start" type="number" placeholder="Ex: 4000">
 
 <label>End chainage (m)</label>
+<input id="end" type="number" placeholder="Ex: 5000">
 
-<input
-  id="end"
-  type="number"
-  placeholder="Ex: 5000"
-/>
+<button id="selectAlignment">Read selected alignment</button>
 
-<button id="slice">
-  Add Cutting Planes
-</button>
+<button id="slice">Add Cutting Planes</button>
 
+<div id="status">Waiting for Trimble Connect...</div>
+
+<script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
 <script src="app.js"></script>
 
 </body>
