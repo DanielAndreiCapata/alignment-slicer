@@ -1,44 +1,83 @@
-document.getElementById("slice").onclick = async () => {
+let API = null;
+let selectedAlignment = null;
 
-  const start =
-    document.getElementById("start").value;
+const statusBox = document.getElementById("status");
 
-  const end =
-    document.getElementById("end").value;
+function setStatus(message) {
+  statusBox.textContent = message;
+}
 
-  if(start === "" || end === ""){
-
-    alert(
-      "Please enter start and end chainage"
+async function init() {
+  try {
+    API = await TrimbleConnectWorkspace.connect(
+      window.parent,
+      (event, data) => {
+        console.log("Trimble event:", event, data);
+      }
     );
 
+    setStatus("Connected to Trimble Connect.\nSelect an alignment in the viewer, then press 'Read selected alignment'.");
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not connect to Trimble Connect Workspace API.");
+  }
+}
+
+document.getElementById("selectAlignment").onclick = async () => {
+  if (!API) {
+    setStatus("API is not connected yet.");
     return;
   }
 
-  const startNumber = Number(start);
-  const endNumber = Number(end);
+  try {
+    const selection = await API.viewer.getSelection();
 
-  if(startNumber >= endNumber){
+    console.log("Selection:", selection);
 
-    alert(
-      "End chainage must be greater than start chainage"
+    if (!selection || selection.length === 0) {
+      setStatus("No object selected.\nSelect the alignment in the viewer first.");
+      return;
+    }
+
+    selectedAlignment = selection;
+
+    setStatus(
+      "Selected object detected:\n\n" +
+      JSON.stringify(selection, null, 2)
     );
 
-    return;
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not read selected object.\nCheck browser console for details.");
   }
-
-  alert(
-
-    "Creating slice from:\n\n" +
-
-    startNumber +
-
-    " m\n\n to \n\n" +
-
-    endNumber +
-
-    " m"
-
-  );
-
 };
+
+document.getElementById("slice").onclick = async () => {
+  const start = Number(document.getElementById("start").value);
+  const end = Number(document.getElementById("end").value);
+
+  if (!start || !end) {
+    setStatus("Enter both start and end chainage.");
+    return;
+  }
+
+  if (start >= end) {
+    setStatus("End chainage must be greater than start chainage.");
+    return;
+  }
+
+  if (!selectedAlignment) {
+    setStatus("No alignment stored.\nSelect alignment first and press 'Read selected alignment'.");
+    return;
+  }
+
+  setStatus(
+    "Ready to create slice:\n\n" +
+    "Start: " + start + " m\n" +
+    "End: " + end + " m\n\n" +
+    "Alignment selection:\n" +
+    JSON.stringify(selectedAlignment, null, 2)
+  );
+};
+
+init();
