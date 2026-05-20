@@ -1,50 +1,90 @@
 <!doctype html>
 <html>
+
 <head>
-  <meta charset="utf-8">
-  <title>Alignment Slicer</title>
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
+<meta charset="utf-8">
 
-    input, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 6px;
-      margin-bottom: 12px;
-      box-sizing: border-box;
-    }
+<title>
+Alignment Slicer
+</title>
 
-    #status {
-      margin-top: 12px;
-      font-size: 13px;
-      color: #333;
-      white-space: pre-wrap;
-    }
-  </style>
+<style>
+
+body {
+
+  font-family: Arial;
+  padding: 20px;
+
+}
+
+input,
+button,
+select {
+
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+
+}
+
+#status {
+
+  white-space: pre-wrap;
+  margin-top: 15px;
+  font-size: 13px;
+
+}
+
+</style>
+
 </head>
 
 <body>
 
-<h2>Alignment Slicer</h2>
+<h2>
+Alignment Slicer
+</h2>
 
-<label>Start chainage (m)</label>
-<input id="start" type="number" placeholder="Ex: 4000">
+<label>
+Alignment
+</label>
 
-<label>End chainage (m)</label>
-<input id="end" type="number" placeholder="Ex: 5000">
+<select id="alignmentSelect"></select>
 
-<button id="selectAlignment">Read selected alignment</button>
+<label>
+Start chainage (m)
+</label>
 
-<button id="slice">Add Cutting Planes</button>
+<input
+  id="start"
+  type="number"
+  placeholder="Ex: 4000"
+/>
 
-<div id="status">Waiting for Trimble Connect...</div>
+<label>
+End chainage (m)
+</label>
+
+<input
+  id="end"
+  type="number"
+  placeholder="Ex: 5000"
+/>
+
+<button id="slice">
+Calculate Slice
+</button>
+
+<div id="status">
+Loading...
+</div>
 
 <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
-<script src="app.js?v=3"></script>
+
+<script src="app.js?v=20"></script>
 
 </body>
 </html>
