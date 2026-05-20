@@ -9,35 +9,69 @@ function setStatus(text) {
 }
 
 async function init() {
-  API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
+  setStatus("Starting...");
 
-  const response = await fetch("./aliniamente.xml?v=50");
-  const xmlText = await response.text();
+  try {
+    API = await TrimbleConnectWorkspace.connect(window.parent, () => {});
+    setStatus("Connected to Trimble Connect.\nLoading XML...");
+  } catch (error) {
+    console.warn(error);
+    setStatus("Could not connect to Trimble API, but XML loading will continue...");
+  }
 
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(xmlText, "text/xml");
+  await loadXML();
+}
 
-  const alignmentNodes = Array.from(xml.getElementsByTagName("Alignment"));
+async function loadXML() {
+  try {
+    let response = await fetch("./aliniamente.xml?v=60");
 
-  alignmentSelect.innerHTML = "";
+    if (!response.ok) {
+      response = await fetch("./Aliniamente.xml?v=60");
+    }
 
-  alignments = alignmentNodes.map((node, index) => {
-    const item = {
-      name: node.getAttribute("name"),
-      length: Number(node.getAttribute("length")),
-      node
-    };
+    if (!response.ok) {
+      throw new Error("XML file not found.");
+    }
 
-    const option = document.createElement("option");
-    option.value = index;
-    option.textContent = `${item.name} | Length: ${item.length.toFixed(2)} m`;
+    const xmlText = await response.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlText, "text/xml");
 
-    alignmentSelect.appendChild(option);
+    const alignmentNodes = Array.from(xml.getElementsByTagName("Alignment"));
 
-    return item;
-  });
+    if (alignmentNodes.length === 0) {
+      throw new Error("No Alignment nodes found in XML.");
+    }
 
-  setStatus(`Ready.\nAlignments loaded: ${alignments.length}`);
+    alignmentSelect.innerHTML = "";
+
+    alignments = alignmentNodes.map((node, index) => {
+      const item = {
+        name: node.getAttribute("name"),
+        length: Number(node.getAttribute("length")),
+        node: node
+      };
+
+      const option = document.createElement("option");
+      option.value = index;
+      option.textContent = `${item.name} | Length: ${item.length.toFixed(2)} m`;
+
+      alignmentSelect.appendChild(option);
+
+      return item;
+    });
+
+    setStatus(`Ready.\nAlignments loaded: ${alignments.length}`);
+
+  } catch (error) {
+    console.error(error);
+    setStatus(
+      "ERROR loading XML:\n\n" +
+      error.message +
+      "\n\nCheck that the XML file exists in GitHub."
+    );
+  }
 }
 
 function parsePoint(text) {
@@ -49,14 +83,12 @@ function getSegments(alignmentNode) {
   const coordGeom = alignmentNode.getElementsByTagName("CoordGeom")[0];
   const lines = Array.from(coordGeom.getElementsByTagName("Line"));
 
-  return lines.map(line => {
-    return {
-      staStart: Number(line.getAttribute("staStart")),
-      length: Number(line.getAttribute("length")),
-      start: parsePoint(line.getElementsByTagName("Start")[0].textContent),
-      end: parsePoint(line.getElementsByTagName("End")[0].textContent)
-    };
-  });
+  return lines.map(line => ({
+    staStart: Number(line.getAttribute("staStart")),
+    length: Number(line.getAttribute("length")),
+    start: parsePoint(line.getElementsByTagName("Start")[0].textContent),
+    end: parsePoint(line.getElementsByTagName("End")[0].textContent)
+  }));
 }
 
 function getPointAtChainage(segments, chainage) {
@@ -103,12 +135,11 @@ async function addPlane(point, normalX, normalY) {
 
 document.getElementById("slice").onclick = async () => {
   const alignment = alignments[Number(alignmentSelect.value)];
-
   const start = Number(document.getElementById("start").value);
   const end = Number(document.getElementById("end").value);
 
   if (!alignment) {
-    setStatus("Select alignment.");
+    setStatus("Select an alignment.");
     return;
   }
 
@@ -118,15 +149,11 @@ document.getElementById("slice").onclick = async () => {
   }
 
   if (end > alignment.length) {
-    setStatus(
-      `End chainage is outside alignment length.\n\n` +
-      `Alignment length: ${alignment.length.toFixed(2)} m`
-    );
+    setStatus(`End chainage is outside alignment length.\nLength: ${alignment.length.toFixed(2)} m`);
     return;
   }
 
   const segments = getSegments(alignment.node);
-
   const p1 = getPointAtChainage(segments, start);
   const p2 = getPointAtChainage(segments, end);
 
@@ -142,19 +169,12 @@ document.getElementById("slice").onclick = async () => {
     await addPlane(p2, p2.dirY, -p2.dirX);
 
     setStatus(
-      `Slice created.\n\n` +
-      `Alignment: ${alignment.name}\n` +
-      `Start: ${start} m\n` +
-      `End: ${end} m`
+      `Slice created.\n\nAlignment: ${alignment.name}\nStart: ${start} m\nEnd: ${end} m`
     );
 
   } catch (error) {
     console.error(error);
-
-    setStatus(
-      "Could not create section planes.\n\n" +
-      "Open browser console and send me the error."
-    );
+    setStatus("Could not create section planes.\n\n" + error.message);
   }
 };
 
